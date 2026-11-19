@@ -4,16 +4,29 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 from .database import engine, Base, get_db
 from .routers import user,post,auth,vote
+from fastapi.middleware.cors import CORSMiddleware
 
-@asynccontextmanager
+
+""" @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
 
     yield
 
-    engine.dispose()
+    engine.dispose() """
+# Not needed when using alembic, although no problem even if not disconnected while using alembic
     
-app = FastAPI(lifespan=lifespan)
+app = FastAPI()
+
+origins = ["*"]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"]
+)
 
 @app.get("/test-db")
 def test_db(db: Session = Depends(get_db)):
