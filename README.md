@@ -1,44 +1,54 @@
 # Social Media Backend
 
-A REST API for a social media application built with **FastAPI**, **SQLAlchemy**, and **PostgreSQL**. The API supports user registration, JWT authentication, and creating, reading, updating, and deleting posts.
+A REST API for a social media application built with **FastAPI**, **SQLAlchemy 2**, and **PostgreSQL**. It provides user registration, JWT authentication, post management, and post voting.
 
 ## Features
 
-- User registration with secure password hashing
+- User registration with password hashing
 - JWT bearer-token authentication
-- PostgreSQL database integration
-- User and post management
-- Post pagination and content search
-- Automatic interactive API documentation
+- PostgreSQL persistence with SQLAlchemy
+- Create, read, update, and delete posts
+- Ownership checks for post updates and deletion
+- Pagination and title search for posts
+- Upvote and remove-vote support
+- Automatic table creation when the application starts
+- Interactive Swagger UI and ReDoc documentation
 
-## Tech Stack
+## Tech stack
 
 - Python 3.10+
 - FastAPI
+- Uvicorn
 - SQLAlchemy 2
-- PostgreSQL
+- PostgreSQL with `psycopg`
 - Pydantic Settings
 - PyJWT
 - pwdlib
 
-## Project Structure
+## Project structure
 
 ```text
 app/
-├── main.py              # FastAPI application and lifecycle setup
+├── main.py              # FastAPI application, lifecycle, and health check
 ├── config.py            # Environment-backed settings
-├── database.py          # PostgreSQL connection and database session
-├── models.py            # SQLAlchemy models
+├── database.py          # PostgreSQL engine and database sessions
+├── models.py            # User, post, and vote SQLAlchemy models
 ├── schemas.py           # Request and response schemas
 ├── routers/
-│   ├── auth.py          # Login and token generation
-│   ├── post.py          # Post endpoints
-│   └── user.py          # User endpoints
+│   ├── auth.py          # Login and JWT token generation
+│   ├── post.py          # Post CRUD, pagination, and search
+│   ├── user.py          # User registration and retrieval
+│   └── vote.py          # Add and remove votes
 └── utils/
-    └── security.py      # Password and JWT helpers
+    └── security.py      # Password hashing and JWT helpers
 ```
 
-## Getting Started
+## Getting started
+
+### Prerequisites
+
+- Python 3.10 or newer
+- PostgreSQL
 
 ### 1. Clone the repository
 
@@ -54,10 +64,10 @@ python -m venv .venv
 source .venv/bin/activate
 ```
 
-On Windows:
+On Windows PowerShell:
 
 ```powershell
-.venv\Scripts\activate
+.venv\Scripts\Activate.ps1
 ```
 
 ### 3. Install dependencies
@@ -83,43 +93,61 @@ ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=30
 ```
 
-Create the PostgreSQL database named in `DATABASE_NAME` before starting the application. Tables are created automatically when the application starts.
+Create the PostgreSQL database named by `DATABASE_NAME` before starting the API. The application creates the `users`, `posts`, and `votes` tables on startup.
 
-### 5. Run the server
+### 5. Start the server
 
 ```bash
 uvicorn app.main:app --reload
 ```
 
-The API is available at <http://127.0.0.1:8000>.
-
-Interactive documentation:
+The API runs at <http://127.0.0.1:8000>.
 
 - Swagger UI: <http://127.0.0.1:8000/docs>
 - ReDoc: <http://127.0.0.1:8000/redoc>
 
-## API Endpoints
+## Authentication
+
+Login uses OAuth2 form data. Send the user's email in the `username` field:
+
+```bash
+curl -X POST http://127.0.0.1:8000/login \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "username=user@example.com&password=secure-password"
+```
+
+The response contains a JWT access token:
+
+```json
+{
+  "access_token": "<jwt>",
+  "token_type": "bearer"
+}
+```
+
+Use the token on protected routes:
+
+```http
+Authorization: Bearer <access_token>
+```
+
+## API endpoints
 
 ### Authentication
 
-| Method | Endpoint | Description | Authentication |
+| Method | Endpoint | Description | Auth |
 | --- | --- | --- | --- |
-| `POST` | `/login` | Authenticate a user and return an access token | No |
-
-`/login` uses OAuth2 form fields:
-
-- `username`: the user's email address
-- `password`: the user's password
+| `POST` | `/login` | Authenticate a user and return a JWT | No |
 
 ### Users
 
-| Method | Endpoint | Description | Authentication |
+| Method | Endpoint | Description | Auth |
 | --- | --- | --- | --- |
 | `POST` | `/users/create` | Register a user | No |
-| `GET` | `/users/` | List users | Bearer token |
+| `GET` | `/users/` | List all users | Bearer token |
 | `GET` | `/users/{id}` | Get a user by ID | No |
 
-Example registration request:
+Registration body:
 
 ```json
 {
@@ -130,31 +158,73 @@ Example registration request:
 
 ### Posts
 
-| Method | Endpoint | Description | Authentication |
+| Method | Endpoint | Description | Auth |
 | --- | --- | --- | --- |
-| `GET` | `/posts/` | List posts | Bearer token |
-| `GET` | `/posts/{id}` | Get a post by ID | No |
-| `POST` | `/posts/create` | Create a post | Bearer token |
+| `GET` | `/posts/` | List posts with vote counts | Bearer token |
+| `GET` | `/posts/{id}` | Get one post with its vote count | No |
+| `POST` | `/posts/create` | Create a post for the authenticated user | Bearer token |
 | `PATCH` | `/posts/{id}` | Update an owned post | Bearer token |
 | `DELETE` | `/posts/{id}` | Delete an owned post | Bearer token |
 
-The post list endpoint supports:
+Create a post with:
 
-- `limit`: number of posts to return, from 1 to 100; default `10`
-- `offset`: number of posts to skip; default `0`
-- `search`: case-insensitive search against post content
-
-Authenticated requests should include:
-
-```http
-Authorization: Bearer <access_token>
+```json
+{
+  "title": "My first post",
+  "content": "Hello from the API",
+  "published": true
+}
 ```
 
-### Database Health Check
+`GET /posts/` supports these query parameters:
+
+| Parameter | Default | Description |
+| --- | --- | --- |
+| `limit` | `10` | Number of posts to return, from 1 to 100 |
+| `offset` | `0` | Number of posts to skip |
+| `search` | none | Case-sensitive search within post titles |
+
+Post responses include the post, its owner, and the total vote count:
+
+```json
+{
+  "post": {
+    "id": 1,
+    "title": "My first post",
+    "content": "Hello from the API",
+    "published": true,
+    "created_at": "2026-01-01T12:00:00Z",
+    "owner_id": 1,
+    "owner": {
+      "id": 1,
+      "email": "user@example.com",
+      "created_at": "2026-01-01T12:00:00Z"
+    }
+  },
+  "votes": 0
+}
+```
+
+### Votes
+
+| Method | Endpoint | Description | Auth |
+| --- | --- | --- | --- |
+| `POST` | `/vote/` | Add or remove the authenticated user's vote | Bearer token |
+
+Send `dir: 1` to add a vote or `dir: 0` to remove an existing vote:
+
+```json
+{
+  "post_id": 1,
+  "dir": 1
+}
+```
+
+### Database health check
 
 | Method | Endpoint | Description |
 | --- | --- | --- |
-| `GET` | `/test-db` | Check the PostgreSQL connection |
+| `GET` | `/test-db` | Check the PostgreSQL connection and database name |
 
 ## License
 
