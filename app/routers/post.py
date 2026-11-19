@@ -1,5 +1,5 @@
 from fastapi import status, HTTPException, Depends, APIRouter, Query
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.orm import Session
 from .. import models, schemas
 from ..database import get_db
@@ -8,7 +8,7 @@ from ..utils import security
 router = APIRouter(prefix="/posts", tags=["Posts"])
 
 
-@router.get("/", response_model=list[schemas.PostResponse])
+@router.get("/", response_model=list[schemas.PostOut])
 def get_posts(
     db: Session = Depends(get_db),
     current_user: int = Depends(security.get_current_user),
@@ -17,31 +17,45 @@ def get_posts(
     search: str | None = Query(default=None),
 ):
 
-    stmt = select(models.Post)
-    
+    stmt = (
+        select(models.Post, func.count(models.Vote.post_id).label("votes"))
+        .join(models.Vote, models.Vote.post_id == models.Post.id, isouter=True)
+        .group_by(models.Post.id)
+    )
+
     if search:
-        stmt = stmt.where(models.Post.content.ilike(f"%{search}%"))
-        
+        stmt = stmt.where(models.Post.title.contains(search))
+
     stmt = stmt.limit(limit).offset(offset)
 
-    posts = db.execute(stmt).scalars().all()
+    posts = [
+        {"post": post, "votes": votes}
+        for post, votes in db.execute(stmt).all()
+    ]
 
     return posts
 
 
-@router.get("/{id}", response_model=schemas.PostResponse)
+@router.get("/{id}", response_model=schemas.PostOut)
 def get_post(id: int, db: Session = Depends(get_db)):
 
-    stmt = select(models.Post).where(models.Post.id == id)
+    stmt = (
+        select(models.Post, func.count(models.Vote.post_id).label("votes"))
+        .join(models.Vote, models.Vote.post_id == models.Post.id, isouter=True)
+        .group_by(models.Post.id)
+        .where(models.Post.id == id)
+    )
 
-    post = db.execute(stmt).scalar_one_or_none()
+    row = db.execute(stmt).one_or_none()
+    post = row[0] if row is not None else None
+    votes = row[1] if row is not None else None
 
     if post is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Post not found"
         )
 
-    return post
+    return {"post": post, "votes": votes}
 
 
 @router.post(

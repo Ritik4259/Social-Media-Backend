@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from .database import engine, Base, get_db
-from .routers import user,post,auth
+from .routers import user,post,auth,vote
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -30,3 +30,4 @@ def test_db(db: Session = Depends(get_db)):
 app.include_router(post.router)
 app.include_router(user.router)
 app.include_router(auth.router)
+app.include_router(vote.router)

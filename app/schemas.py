@@ -1,5 +1,5 @@
-from pydantic import BaseModel, ConfigDict, EmailStr
-from typing import Optional
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from typing import Annotated, Optional
 from datetime import datetime
 
 
@@ -16,7 +16,7 @@ class UserResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-
+       
 class PostResponse(BaseModel):
     id: int
     title: str
@@ -34,6 +34,11 @@ class PostUpdate(BaseModel):
     content: Optional[str] = None
     published: Optional[bool] = None
 
+class PostOut(BaseModel):
+    post : PostResponse
+    votes : int
+    
+    model_config = ConfigDict(from_attributes=True)
 
 # USER SCHEMAS
 
@@ -54,3 +59,7 @@ class UserResponse(BaseModel):
 class UserLogin(BaseModel):
     email: EmailStr
     password: str
+
+class Vote(BaseModel):
+    post_id: int
+    dir: Annotated[int, Field(le=1)]
