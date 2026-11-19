@@ -1,18 +1,20 @@
 # Social Media Backend
 
-A REST API for a social media application built with **FastAPI**, **SQLAlchemy 2**, and **PostgreSQL**. It provides user registration, JWT authentication, post management, and post voting.
+A REST API for a social media application built with **FastAPI**, **SQLAlchemy 2**, and **PostgreSQL**. The API supports user registration, JWT authentication, post management, and post voting.
 
 ## Features
 
-- User registration with password hashing
+- User registration with Argon2 password hashing through `pwdlib`
 - JWT bearer-token authentication
-- PostgreSQL persistence with SQLAlchemy
+- PostgreSQL persistence through SQLAlchemy 2 and Psycopg 3
+- Alembic database migrations
 - Create, read, update, and delete posts
 - Ownership checks for post updates and deletion
 - Pagination and title search for posts
-- Upvote and remove-vote support
-- Automatic table creation when the application starts
+- Add and remove votes
+- CORS enabled for all origins
 - Interactive Swagger UI and ReDoc documentation
+- Database connectivity health check
 
 ## Tech stack
 
@@ -20,7 +22,9 @@ A REST API for a social media application built with **FastAPI**, **SQLAlchemy 2
 - FastAPI
 - Uvicorn
 - SQLAlchemy 2
-- PostgreSQL with `psycopg`
+- PostgreSQL
+- Psycopg 3
+- Alembic
 - Pydantic Settings
 - PyJWT
 - pwdlib
@@ -29,7 +33,7 @@ A REST API for a social media application built with **FastAPI**, **SQLAlchemy 2
 
 ```text
 app/
-├── main.py              # FastAPI application, lifecycle, and health check
+├── main.py              # FastAPI application, CORS, health check, and routers
 ├── config.py            # Environment-backed settings
 ├── database.py          # PostgreSQL engine and database sessions
 ├── models.py            # User, post, and vote SQLAlchemy models
@@ -41,6 +45,10 @@ app/
 │   └── vote.py          # Add and remove votes
 └── utils/
     └── security.py      # Password hashing and JWT helpers
+
+alembic/
+├── env.py               # Alembic environment and database URL
+└── versions/            # Database migration revisions
 ```
 
 ## Getting started
@@ -72,9 +80,10 @@ On Windows PowerShell:
 
 ### 3. Install dependencies
 
+Install the pinned dependencies from the repository:
+
 ```bash
-pip install fastapi uvicorn sqlalchemy "psycopg[binary]" pydantic-settings \
-  email-validator pwdlib pyjwt python-multipart
+pip install -r requirements.txt
 ```
 
 ### 4. Configure environment variables
@@ -93,9 +102,22 @@ ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=30
 ```
 
-Create the PostgreSQL database named by `DATABASE_NAME` before starting the API. The application creates the `users`, `posts`, and `votes` tables on startup.
+Create the PostgreSQL database named by `DATABASE_NAME` before running migrations.
 
-### 5. Start the server
+### 5. Apply database migrations
+
+```bash
+alembic upgrade head
+```
+
+The migrations create the `users`, `posts`, and `votes` tables. To create a new migration after changing the SQLAlchemy models:
+
+```bash
+alembic revision --autogenerate -m "describe the schema change"
+alembic upgrade head
+```
+
+### 6. Start the server
 
 ```bash
 uvicorn app.main:app --reload
@@ -139,6 +161,8 @@ Authorization: Bearer <access_token>
 | --- | --- | --- | --- |
 | `POST` | `/login` | Authenticate a user and return a JWT | No |
 
+The login request uses `application/x-www-form-urlencoded` with `username` and `password` fields.
+
 ### Users
 
 | Method | Endpoint | Description | Auth |
@@ -155,6 +179,8 @@ Registration body:
   "password": "secure-password"
 }
 ```
+
+Passwords are hashed before they are stored. User responses contain the ID, email, and creation timestamp, but never the password.
 
 ### Posts
 
@@ -176,15 +202,25 @@ Create a post with:
 }
 ```
 
+`PATCH /posts/{id}` accepts any subset of these fields:
+
+```json
+{
+  "title": "An updated title",
+  "content": "Updated content",
+  "published": false
+}
+```
+
 `GET /posts/` supports these query parameters:
 
 | Parameter | Default | Description |
 | --- | --- | --- |
 | `limit` | `10` | Number of posts to return, from 1 to 100 |
 | `offset` | `0` | Number of posts to skip |
-| `search` | none | Case-sensitive search within post titles |
+| `search` | none | Filter posts by a matching title string |
 
-Post responses include the post, its owner, and the total vote count:
+Post list and detail responses contain the post, its owner, and the total vote count:
 
 ```json
 {
@@ -220,11 +256,22 @@ Send `dir: 1` to add a vote or `dir: 0` to remove an existing vote:
 }
 ```
 
+A user can vote only once per post. Adding an existing vote returns `409 Conflict`; removing a vote that does not exist returns `404 Not Found`.
+
 ### Database health check
 
 | Method | Endpoint | Description |
 | --- | --- | --- |
-| `GET` | `/test-db` | Check the PostgreSQL connection and database name |
+| `GET` | `/test-db` | Check the PostgreSQL connection and return the current database name |
+
+Example response:
+
+```json
+{
+  "connected": true,
+  "database": "social_media"
+}
+```
 
 ## License
 
