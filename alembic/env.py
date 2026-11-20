@@ -12,12 +12,7 @@ from app.config import settings
 # access to the values within the .ini file in use.
 config = context.config
 config.set_main_option(
-    "sqlalchemy.url",f"postgresql+psycopg://"
-        f"{settings.database_username}:"
-        f"{settings.database_password}@"
-        f"{settings.database_hostname}:"
-        f"{settings.database_port}/"
-        f"{settings.database_name}"
+    "sqlalchemy.url",f"{settings.database_url_pooled}"
 )
 
 # Interpret the config file for Python logging.

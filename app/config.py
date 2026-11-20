@@ -2,6 +2,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    database_url_pooled: str
     database_hostname: str
     database_port: int
     database_password: str
