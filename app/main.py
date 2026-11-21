@@ -39,6 +39,10 @@ def test_db(db: Session = Depends(get_db)):
         raise HTTPException(
             status_code=500, detail=f"Database connection failed: {str(e)}"
         )
+
+@app.get("/")
+def welcome():
+    return {"message":"Hello World"}
         
 app.include_router(post.router)
 app.include_router(user.router)
